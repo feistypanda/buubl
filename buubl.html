@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html> 
+    <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c&family=Rowdies:wght@300;400;700&family=Signika:wght@300..700&display=swap" rel="stylesheet">
+
+
+
+        <title>Bubbl</title> 
+        <style type="text/css">
+
+            *{
+                margin: 0px;
+                overflow: hidden;
+            }            
+            
+        </style>
+    </head>
+    <body>
+        <p align = "center">
+            <canvas id="mycanvas"></canvas> 
+        </p>
+    </body>
+ 
+    <script src="https://cdn.jsdelivr.net/processing.js/1.4.8/processing.min.js"></script> 
+
+    <script type>
+
+function main() {
+
+var programCode = function(processingInstance) {
+with (processingInstance) {
+
+// dynamic window size
+size(window.innerWidth, window.innerHeight);
+
+// usual setup
+smooth();
+frameRate(60);
+
+// color mode
+colorMode(HSB);
+
+var bgColors = [color(0, 0, 0), color(255)];
+var bgColor = 0;
+var bouncy = 0.2;
+var debug = false;
+
+// function to make colsole logging easier. m is the thing to be logged
+function clog(m) {
+    console.log(m);
+}
+
+function distSq(x1, y1, x2, y2) {
+    return (x1 - x2) * (x1 - x2) + (y1 - y2) * (y1 - y2);
+}
+
+var bubbles = (function() {
+    var Bubbles = function() {
+        this.bubbles = [];
+        this.Bubble = (function() {
+            var Bubble = function(config) {
+                this.position = new PVector(config.x, config.y);
+                this.velocity = new PVector(config.velX, config.velY);
+                this.acceleration = new PVector(0, 0);
+
+                this.radius = config.radius;
+
+                this.mass = this.radius;
+                this.invertMass = !this.mass ? 0 : 1 / this.mass;
+
+                this.colorOffset = random(0, 360);
+            };
+
+            Bubble.prototype.display = function() {
+
+                stroke(round((frameCount/2 + this.colorOffset) % 255), 255, 200, 100);
+                strokeWeight(5);
+
+                ellipse(this.position.x, this.position.y, this.radius * 2 - 4, this.radius * 2 - 4);
+                if (debug) {
+                    line(this.position.x, this.position.y, this.position.x + this.velocity.x * 20, this.position.y + this.velocity.y * 20);
+                }
+
+                noFill();
+
+                strokeWeight(1);
+
+                stroke(round((frameCount/2 + this.colorOffset) % 255), 255, 255);
+
+                ellipse(this.position.x, this.position.y, this.radius * 2 - 4, this.radius * 2 - 4);
+
+                if (debug) {
+                    line(this.position.x, this.position.y, this.position.x + this.velocity.x * 20, this.position.y + this.velocity.y * 20);
+                }
+
+            };
+
+            Bubble.prototype.applyForce = function(force) {
+                this.acceleration.add(PVector.mult(force, this.invertMass));
+            };
+
+            Bubble.prototype.update = function() {
+
+                if (this.position.y > height/4 && this.position.y < height * 3/4) {
+                    this.applyForce(new PVector(-1, 0));
+                    if (this.position.x < width/4) {
+                        this.applyForce(new PVector(0, (this.position.y - height/2)/abs((this.position.y - height/2))));
+                    } else if (this.position.x > width * 3/4) {
+                        
+                        this.applyForce(new PVector(0, -(this.position.y - height/2)/abs((this.position.y - height/2))));
+                    }
+                } else {
+                    this.applyForce(new PVector(1, 0));
+                    if (this.position.x < width/4) {
+                        this.applyForce(new PVector(0, (this.position.y - height/2)/abs((this.position.y - height/2))));
+                    } else if (this.position.x > width * 3/4) {
+                        
+                        this.applyForce(new PVector(0, -(this.position.y - height/2)/abs((this.position.y - height/2))));
+                    }
+                }
+
+                
+
+                this.velocity.add(this.acceleration);
+                this.acceleration.mult(0);
+                this.position.add(this.velocity);
+            };
+
+            Bubble.prototype.colliding = function(other) {
+                var bubbleDistSq = distSq(this.position.x, this.position.y, other.position.x, other.position.y);
+                var totalRadius = this.radius + other.radius;
+                return bubbleDistSq < totalRadius * totalRadius;
+            }
+            
+            //https://stackoverflow.com/questions/345838/ball-to-ball-collision-detection-and-handling
+            Bubble.prototype.resolveCollision = function(other) {
+
+                var delta = PVector.sub(this.position, other.position);
+
+                var d = delta.mag();
+
+                var mtd = PVector.mult(delta, (((this.radius + other.radius)-d)/d));
+
+                var im1 = this.invertMass;
+                var im2 = other.invertMass;
+
+                this.position.add(PVector.mult(mtd, (im1 / (im1 + im2))));
+                other.position.sub(PVector.mult(mtd, (im1 / (im1 + im2))));
+
+                var v = PVector.sub(this.velocity, other.velocity);
+
+                var vn = v.dot(PVector.normalize(mtd));
+                
+                if (vn > 0) {
+                    
+                    return;
+                }
+
+
+                var imp = (-1 - bouncy) * vn / (im1 + im2);
+
+                var impulse = PVector.mult(PVector.normalize(mtd), imp);
+
+                this.velocity.add(PVector.mult(impulse, im1));
+                other.velocity.sub(PVector.mult(impulse, im2));
+            };
+
+            Bubble.prototype.wallCollide = function() {
+
+                if (this.position.x + this.radius > width) {
+                    this.position.x = width - this.radius;
+                    this.velocity.x *= -bouncy;
+                } else if (this.position.x - this.radius < 0) {
+                    this.position.x = this.radius;
+                    this.velocity.x *= -bouncy;
+                }
+
+                if (this.position.y + this.radius > height) {
+                    this.position.y = height - this.radius;
+                    this.velocity.y *= -bouncy;
+                } else if (this.position.y - this.radius < 0) {
+                    this.position.y = this.radius;
+                    this.velocity.y *= -bouncy;
+                }
+            };
+
+            return Bubble;
+        })();
+    };
+
+    Bubbles.prototype.run = function() {
+
+        for (var k = 0; k < 5; k ++) {
+            for (var i = 0; i < this.bubbles.length; i ++) {  
+                for (var j = i + 1; j < this.bubbles.length; j++) { 
+
+                    if (this.bubbles[i].colliding(this.bubbles[j])) {
+                        this.bubbles[i].resolveCollision(this.bubbles[j]);
+                    }
+                    this.bubbles[i].wallCollide();
+                    this.bubbles[j].wallCollide();
+
+                }
+            }
+        }
+
+        for (var i = this.bubbles.length - 1; i >= 0; i--) {
+            this.bubbles[i].update();
+            noStroke();
+            fill(0, 0, 0, 5);
+            ellipse(this.bubbles[i].position.x + 20, this.bubbles[i].position.y + 25, this.bubbles[i].radius * 2, this.bubbles[i].radius * 2);
+        }
+
+        for (var i = this.bubbles.length - 1; i >= 0; i--) {
+            this.bubbles[i].display();
+        }
+    };
+
+    Bubbles.prototype.add = function(config) {
+        this.bubbles.push(new this.Bubble(config));
+    };
+
+    return new Bubbles;
+})();
+
+for (var i = 0; i < width * height / 30686.25; i ++) {
+    bubbles.add({
+    x: 60 + i * 30, y: height/2 + i % 2,
+    velX : 1, velY: 0,
+    radius: 70,
+});
+}
+
+
+function screenSaver() {
+    background(bgColors[bgColor]);
+    bubbles.run();
+}
+
+draw = function() {
+
+    try {
+        screenSaver();
+    } catch (e) {
+        clog(e);
+    }
+
+}
+
+mousePressed = function() {
+    bgColor ++;
+    if (bgColor >= bgColors.length) {
+        bgColor = 0;
+    }
+};
+
+}
+};
+var canvas = document.querySelector("#mycanvas"); 
+var processingInstance = new Processing(canvas, programCode);}
+
+main();
+    </script>
+    <script></script>
+</html> 
